@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -97,14 +98,15 @@ fun CustomClickableImage(
     image: Int,
     onClick: () -> Unit,
 ) {
-    Image(
+    Icon(
         painter = painterResource(image),
         contentDescription = text,
-
+        tint = MaterialTheme.colorScheme.onBackground,
         modifier = modifier
             .padding(5.dp)
-            .clip(shape = RoundedCornerShape(10.dp))
-            .background(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4F))
+            .clip(shape = RoundedCornerShape(40))
+            .background(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.4F))
+//            .background(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4F))
             .clickable { onClick() }
             .padding(5.dp)
     )

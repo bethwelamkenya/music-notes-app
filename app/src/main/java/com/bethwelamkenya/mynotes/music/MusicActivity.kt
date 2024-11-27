@@ -13,10 +13,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -24,10 +26,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
@@ -40,17 +44,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.bethwelamkenya.mynotes.R
 import com.bethwelamkenya.mynotes.music.models.Song
 import com.bethwelamkenya.mynotes.music.ui.theme.MyNotesTheme
 import com.bethwelamkenya.mynotes.ui.components.CustomClickableImage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Date
 import java.util.Locale
@@ -72,51 +79,6 @@ class MusicActivity : ComponentActivity() {
     }
 }
 
-@Composable
-fun Greeting2(context: Context, modifier: Modifier = Modifier) {
-    val songs = getMusicFiles(context = context)
-    var playingSong by remember { mutableStateOf<Song?>(null) }
-
-    if (playingSong == null) {
-        Column(modifier = modifier) {
-            Text(
-                text = "Hello Music!"
-            )
-            LazyColumn {
-                itemsIndexed(items = songs) { index, song ->
-                    Column(
-                        modifier = Modifier
-                            .padding(5.dp)
-                            .clip(shape = RoundedCornerShape(10.dp))
-                            .background(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4F))
-                            .clickable { playingSong = song }
-                            .padding(5.dp)
-                    ) {
-                        Row {
-                            Text(
-                                text = (index + 1).toString() + " | ",
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(text = song.title)
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = getLength(song.duration), fontWeight = FontWeight.Bold)
-                            Text(text = song.getFormattedDate())
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        MediaPlayerControl(context = context, songUri = playingSong!!.uri)
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
@@ -132,7 +94,9 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
     )
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
-    val sheetPeekHeight = screenHeight * 0.18f // 20% of the screen height
+    val screenWidth = configuration.screenWidthDp.dp
+    val sheetPeekHeight = screenHeight * 0.15f // 15% of the screen height
+    val imageButtonWidth = screenWidth * 0.10f // 10% of the screen width
 
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -145,14 +109,13 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
         {
             val myModifier =
                 if (bottomSheetScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) {
-                    Modifier.fillMaxSize()
+                    Modifier.fillMaxHeight()
                 } else {
                     Modifier.height(sheetPeekHeight)
                 }
             Column(
                 modifier = myModifier
                     .fillMaxWidth()
-                    .padding(16.dp)
             ) {
                 if (playingSong != null) {
                     MusicPlayerScreen(
@@ -166,24 +129,35 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                         onNext = {
                             isPlaying = false
                             mediaPlayer?.stop()
+//                            mediaPlayer?.release()
+                            mediaPlayer?.reset()
                             playingSong = songs[(songs.indexOf(playingSong) + 1) % songs.size]
                         },
                         onPrevious = {
                             isPlaying = false
                             mediaPlayer?.stop()
+//                            mediaPlayer?.release()
+                            mediaPlayer?.reset()
                             playingSong =
                                 songs[(songs.indexOf(playingSong) - 1 + songs.size) % songs.size]
                         },
+                        width = imageButtonWidth,
+                        state = bottomSheetScaffoldState.bottomSheetState.currentValue
                     )
                 } else {
                     Column(
                         modifier = myModifier,
-                        verticalArrangement = Arrangement.Center,
+                        verticalArrangement = if (bottomSheetScaffoldState.bottomSheetState.currentValue == SheetValue.Expanded) Arrangement.Center else Arrangement.Top,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row {
-                            Text(text = "No song is playing")
-                        }
+                        Text(
+                            text = "No song is playing",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .padding(bottom = 20.dp)
+                                .fillMaxWidth()
+                        )
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -191,30 +165,36 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             CustomClickableImage(
+                                modifier = Modifier.size(imageButtonWidth),
                                 image = R.drawable.baseline_skip_previous_24,
                                 text = "Previous Song"
                             ) {
                                 // Previous song logic
                             }
                             CustomClickableImage(
+                                modifier = Modifier.size(imageButtonWidth),
                                 image = R.drawable.baseline_replay_10_24,
                                 text = "Rewind"
                             ) {
                                 // Rewind logic
                             }
                             CustomClickableImage(
+                                modifier = Modifier.size(imageButtonWidth),
                                 image = R.drawable.baseline_play_arrow_24,
                                 text = "Play/Pause"
                             ) {
                                 // Play/Pause logic
+                                playingSong = songs[0]
                             }
                             CustomClickableImage(
+                                modifier = Modifier.size(imageButtonWidth),
                                 image = R.drawable.baseline_forward_10_24,
                                 text = "Forward"
                             ) {
                                 // Forward logic
                             }
                             CustomClickableImage(
+                                modifier = Modifier.size(imageButtonWidth),
                                 image = R.drawable.baseline_skip_next_24,
                                 text = "Next"
                             ) {
@@ -245,6 +225,10 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                             .clip(shape = RoundedCornerShape(10.dp))
                             .background(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4F))
                             .clickable {
+                                mediaPlayer?.stop()
+//                                mediaPlayer?.release()
+                                mediaPlayer?.reset()
+                                isPlaying = false
                                 playingSong = song
                                 // Expand the bottom sheet when a song is clicked
                                 coroutineScope.launch {
@@ -276,6 +260,7 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MusicPlayerScreen(
     modifier: Modifier = Modifier,
@@ -286,17 +271,14 @@ fun MusicPlayerScreen(
     onMediaPlayerChange: (MediaPlayer) -> Unit,
     onIsPlayingChange: (Boolean) -> Unit,
     onPrevious: () -> Unit = {},
-    onNext: () -> Unit = {}
+    onNext: () -> Unit = {},
+    width: Dp,
+    state: SheetValue
 ) {
-//    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-//    var isPlaying by remember { mutableStateOf(false) }
-
+    var progress by remember { mutableStateOf(0f) }
+    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(song.uri) {
         mediaPlayer?.release()
-//        mediaPlayer = MediaPlayer().apply {
-//            setDataSource(context, android.net.Uri.parse(song.uri))
-//            prepare()
-//        }
         onMediaPlayerChange(
             MediaPlayer().apply {
                 setDataSource(context, android.net.Uri.parse(song.uri))
@@ -308,26 +290,83 @@ fun MusicPlayerScreen(
         onIsPlayingChange(true)
     }
 
+    LaunchedEffect(isPlaying) {
+        if (isPlaying) {
+            coroutineScope.launch {
+                while (mediaPlayer != null) {
+                    suspend fun updatePosition() {
+                        mediaPlayer.let { player ->
+                            // TODO: fix this
+                            if (player.isPlaying){
+                                progress = player.currentPosition / player.duration.toFloat()
+                            }
+                        }
+                        delay(1000L) // Update progress every second
+                    }
+                       updatePosition()
+                }
+            }
+        }
+    }
+
     Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .padding(horizontal = 20.dp),
+        verticalArrangement = if (state == SheetValue.Expanded) Arrangement.Center else Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = song.title)
+        if (state == SheetValue.Expanded)
+            Text(
+                text = song.title,
+                modifier = Modifier
+                    .padding(bottom = 10.dp)
+                    .fillMaxWidth()
+            )
+        else
+            Text(
+                text = song.title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(bottom = 10.dp)
+                    .fillMaxWidth()
+            )
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = getLength(mediaPlayer?.currentPosition?.toLong() ?: 0),
+                modifier = Modifier.weight(0.1F)
+            )
+            Slider(
+                value = progress,
+                onValueChange = { newProgress ->
+                    progress = newProgress
+                    mediaPlayer?.seekTo((newProgress * mediaPlayer.duration).toInt())
+                },
+                modifier = Modifier
+                    .weight(0.8F)
+                    .height(20.dp)
+            )
+            Text(
+                text = getLength(mediaPlayer?.duration?.toLong() ?: 0),
+                modifier = Modifier.weight(0.1F)
+            )
+        }
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             CustomClickableImage(
+                modifier = Modifier.size(width),
                 image = R.drawable.baseline_skip_previous_24,
                 text = "Previous Song"
             ) {
                 // Previous song logic
+                progress = 0F
                 onPrevious()
             }
             CustomClickableImage(
+                modifier = Modifier.size(width),
                 image = R.drawable.baseline_replay_10_24,
                 text = "Rewind"
             ) {
@@ -335,6 +374,7 @@ fun MusicPlayerScreen(
                 mediaPlayer?.seekTo(mediaPlayer.currentPosition - 10000)
             }
             CustomClickableImage(
+                modifier = Modifier.size(width),
                 image = if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24,
                 text = "Play/Pause"
             ) {
@@ -348,6 +388,7 @@ fun MusicPlayerScreen(
                 onIsPlayingChange(!isPlaying)
             }
             CustomClickableImage(
+                modifier = Modifier.size(width),
                 image = R.drawable.baseline_forward_10_24,
                 text = "Forward"
             ) {
@@ -355,10 +396,12 @@ fun MusicPlayerScreen(
                 mediaPlayer?.seekTo(mediaPlayer.currentPosition + 10000)
             }
             CustomClickableImage(
+                modifier = Modifier.size(width),
                 image = R.drawable.baseline_skip_next_24,
                 text = "Next"
             ) {
                 // Next song logic
+                progress = 0F
                 onNext()
             }
         }
@@ -464,6 +507,6 @@ fun getLength(duration: Long): String {
 @Composable
 fun GreetingPreview2() {
     MyNotesTheme {
-        Greeting2(context = MusicActivity())
+        MusicPlayerScaffold(context = MusicActivity())
     }
 }

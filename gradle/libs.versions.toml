@@ -10,6 +10,7 @@ activityCompose = "1.8.0"
 composeBom = "2024.04.01"
 roomKtx = "2.6.0-alpha01"
 designBottomsheet = "28.0.0-alpha1"
+media = "1.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.15.0" }
@@ -28,6 +29,7 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version = "2.6.1" }
 design-bottomsheet = { group = "com.android.support", name = "design-bottomsheet", version.ref = "designBottomsheet" }
+androidx-media = { group = "androidx.media", name = "media", version.ref = "media" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

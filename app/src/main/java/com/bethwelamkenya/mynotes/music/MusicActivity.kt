@@ -1,7 +1,12 @@
 package com.bethwelamkenya.mynotes.music
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.media.MediaPlayer
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import androidx.activity.ComponentActivity
@@ -24,9 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.BottomSheetScaffold
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetState
@@ -44,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +55,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.bethwelamkenya.mynotes.R
 import com.bethwelamkenya.mynotes.music.models.Song
 import com.bethwelamkenya.mynotes.music.ui.theme.MyNotesTheme
@@ -99,7 +103,6 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
     val imageButtonWidth = screenWidth * 0.10f // 10% of the screen width
 
     var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
     var playingSong by remember { mutableStateOf<Song?>(null) }
 
     BottomSheetScaffold(
@@ -123,21 +126,22 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                         context = context,
                         song = playingSong!!,
                         mediaPlayer = mediaPlayer,
-                        isPlaying = isPlaying,
-                        onMediaPlayerChange = { mediaPlayer = it },
-                        onIsPlayingChange = { isPlaying = it },
+                        onMediaPlayerChange = {
+                            mediaPlayer = null
+                            mediaPlayer = it
+                        },
                         onNext = {
-                            isPlaying = false
                             mediaPlayer?.stop()
-//                            mediaPlayer?.release()
-                            mediaPlayer?.reset()
+                            mediaPlayer?.release()
+//                                mediaPlayer?.reset()
+                            mediaPlayer = null
                             playingSong = songs[(songs.indexOf(playingSong) + 1) % songs.size]
                         },
                         onPrevious = {
-                            isPlaying = false
                             mediaPlayer?.stop()
-//                            mediaPlayer?.release()
-                            mediaPlayer?.reset()
+                            mediaPlayer?.release()
+//                                mediaPlayer?.reset()
+                            mediaPlayer = null
                             playingSong =
                                 songs[(songs.indexOf(playingSong) - 1 + songs.size) % songs.size]
                         },
@@ -226,9 +230,9 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                             .background(color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4F))
                             .clickable {
                                 mediaPlayer?.stop()
-//                                mediaPlayer?.release()
-                                mediaPlayer?.reset()
-                                isPlaying = false
+                                mediaPlayer?.release()
+//                                mediaPlayer?.reset()
+                                mediaPlayer = null
                                 playingSong = song
                                 // Expand the bottom sheet when a song is clicked
                                 coroutineScope.launch {
@@ -267,9 +271,7 @@ fun MusicPlayerScreen(
     context: Context,
     song: Song,
     mediaPlayer: MediaPlayer?,
-    isPlaying: Boolean,
     onMediaPlayerChange: (MediaPlayer) -> Unit,
-    onIsPlayingChange: (Boolean) -> Unit,
     onPrevious: () -> Unit = {},
     onNext: () -> Unit = {},
     width: Dp,
@@ -277,36 +279,47 @@ fun MusicPlayerScreen(
 ) {
     var progress by remember { mutableStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
+
     LaunchedEffect(song.uri) {
         mediaPlayer?.release()
         onMediaPlayerChange(
             MediaPlayer().apply {
                 setDataSource(context, android.net.Uri.parse(song.uri))
                 prepare()
-                setOnCompletionListener { onNext() }
                 start()
+                setOnCompletionListener { onNext() }
             }
         )
-        onIsPlayingChange(true)
     }
 
-    LaunchedEffect(isPlaying) {
-        if (isPlaying) {
+    LaunchedEffect(mediaPlayer?.isPlaying) {
+        if (mediaPlayer?.isPlaying == true) {
             coroutineScope.launch {
-                while (mediaPlayer != null) {
-                    suspend fun updatePosition() {
+                try {
+                    while (mediaPlayer.isPlaying) {
                         mediaPlayer.let { player ->
-                            // TODO: fix this
-                            if (player.isPlaying){
-                                progress = player.currentPosition / player.duration.toFloat()
+                            if (player.isPlaying) {
+                                progress = try {
+                                    player.currentPosition / player.duration.toFloat()
+                                } catch (e: IllegalStateException) {
+                                    0f
+                                }
                             }
                         }
                         delay(1000L) // Update progress every second
                     }
-                       updatePosition()
+                } catch (_: Exception) {
                 }
             }
         }
+    }
+    // Update the notification whenever the song or play state changes
+    LaunchedEffect(song.uri, mediaPlayer?.isPlaying) {
+        showMusicNotification(
+            context = context,
+            song = song,
+            isPlaying = mediaPlayer?.isPlaying == true
+        )
     }
 
     Column(
@@ -332,23 +345,31 @@ fun MusicPlayerScreen(
                     .fillMaxWidth()
             )
 
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = getLength(mediaPlayer?.currentPosition?.toLong() ?: 0),
+                textAlign = TextAlign.Center,
                 modifier = Modifier.weight(0.1F)
             )
             Slider(
                 value = progress,
                 onValueChange = { newProgress ->
                     progress = newProgress
-                    mediaPlayer?.seekTo((newProgress * mediaPlayer.duration).toInt())
+                    mediaPlayer?.let { player ->
+                        try {
+                            player.seekTo((newProgress * player.duration).toInt())
+                        } catch (e: IllegalStateException) {
+                            // Handle the exception if needed
+                        }
+                    }
                 },
                 modifier = Modifier
                     .weight(0.8F)
-                    .height(20.dp)
+                    .height(15.dp)
             )
             Text(
                 text = getLength(mediaPlayer?.duration?.toLong() ?: 0),
+                textAlign = TextAlign.Center,
                 modifier = Modifier.weight(0.1F)
             )
         }
@@ -375,17 +396,15 @@ fun MusicPlayerScreen(
             }
             CustomClickableImage(
                 modifier = Modifier.size(width),
-                image = if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24,
+                image = if (mediaPlayer?.isPlaying == true) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24,
                 text = "Play/Pause"
             ) {
                 // Play/Pause logic
-                if (isPlaying) {
-                    mediaPlayer?.pause()
+                if (mediaPlayer?.isPlaying == true) {
+                    mediaPlayer.pause()
                 } else {
                     mediaPlayer?.start()
                 }
-//                isPlaying = !isPlaying
-                onIsPlayingChange(!isPlaying)
             }
             CustomClickableImage(
                 modifier = Modifier.size(width),
@@ -408,48 +427,43 @@ fun MusicPlayerScreen(
     }
 }
 
-
-@Composable
-fun MediaPlayerControl(context: Context, songUri: String) {
-    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var isPlaying by remember { mutableStateOf(false) }
-
-    LaunchedEffect(songUri) {
-        mediaPlayer?.release()
-        mediaPlayer = MediaPlayer().apply {
-            setDataSource(context, android.net.Uri.parse(songUri))
-            prepare()
+fun createNotificationChannel(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val name = "Music Player"
+        val descriptionText = "Channel for music player notifications"
+        val importance = NotificationManager.IMPORTANCE_LOW
+        val channel = NotificationChannel("music_player_channel", name, importance).apply {
+            description = descriptionText
         }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-    ) {
-        Button(onClick = {
-            if (isPlaying) {
-                mediaPlayer?.pause()
-            } else {
-                mediaPlayer?.start()
-            }
-            isPlaying = !isPlaying
-        }) {
-            Text(text = if (isPlaying) "Pause" else "Play")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Button(onClick = {
-            mediaPlayer?.seekTo(0)
-            mediaPlayer?.pause()
-            isPlaying = false
-        }) {
-            Text(text = "Stop")
-        }
+        val notificationManager: NotificationManager =
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.createNotificationChannel(channel)
     }
 }
 
+fun showMusicNotification(context: Context, song: Song, isPlaying: Boolean) {
+    val playPauseIcon =
+        if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
+    val playPauseAction = if (isPlaying) "ACTION_PAUSE" else "ACTION_PLAY"
+
+    val intent = Intent(context, MusicActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    }
+    val pendingIntent: PendingIntent = PendingIntent.getActivity(context, 0, intent, 0)
+
+    val notification = NotificationCompat.Builder(context, "music_player_channel")
+        .setSmallIcon(R.drawable.baseline_music_note_24)
+        .setContentTitle("Now Playing")
+        .setContentText(song.title)
+        .setContentIntent(pendingIntent)
+        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setOnlyAlertOnce(true)
+        .addAction(playPauseIcon, playPauseAction, pendingIntent)
+        .setStyle(androidx.media.app.NotificationCompat.MediaStyle())
+        .build()
+
+    NotificationManagerCompat.from(context).notify(1, notification)
+}
 
 fun getMusicFiles(context: Context): List<Song> {
     val musicFiles = mutableListOf<Song>()
@@ -498,8 +512,10 @@ fun getLength(duration: Long): String {
 
     return if (hrs > 0) {
         String.format(Locale.US, "%02d:%02d:%02d", hrs, min, sec)
+    } else if (min > 0) {
+        String.format(Locale.US, "%d:%02d", min, sec) // Show minutes if greater than 0
     } else {
-        String.format(Locale.US, "%02d:%02d", min, sec).trimStart { it == '0' }
+        String.format(Locale.US, ":%02d", sec) // Show only seconds with leading colon
     }
 }
 

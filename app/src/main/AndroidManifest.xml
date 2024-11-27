@@ -27,6 +27,12 @@
             android:exported="false"
             android:label="@string/title_activity_music"
             android:theme="@style/Theme.MyNotes" />
+        <receiver android:name=".music.services.MusicNotificationReceiver">
+            <intent-filter>
+                <action android:name="ACTION_PLAY" />
+                <action android:name="ACTION_PAUSE" />
+            </intent-filter>
+        </receiver>
         <activity
             android:name=".MainActivity"
             android:exported="true"

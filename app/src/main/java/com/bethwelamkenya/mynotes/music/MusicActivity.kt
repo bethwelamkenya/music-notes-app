@@ -1,10 +1,14 @@
 package com.bethwelamkenya.mynotes.music
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
@@ -38,6 +42,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,8 +62,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.core.content.ContextCompat.registerReceiver
 import com.bethwelamkenya.mynotes.R
 import com.bethwelamkenya.mynotes.music.models.Song
+import com.bethwelamkenya.mynotes.music.services.MusicNotificationReceiver
 import com.bethwelamkenya.mynotes.music.ui.theme.MyNotesTheme
 import com.bethwelamkenya.mynotes.ui.components.CustomClickableImage
 import kotlinx.coroutines.delay
@@ -67,26 +75,86 @@ import java.util.Date
 import java.util.Locale
 
 class MusicActivity : ComponentActivity() {
+    var mediaPlayer by mutableStateOf<MediaPlayer?>(null)
+    var playingSong by mutableStateOf<Song?>(null)
+
+    private lateinit var songs: List<Song>;
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MyNotesTheme {
+                songs = getMusicFiles(this)
+
+                // Register the receiver to handle play/pause actions
+                val filter = IntentFilter().apply {
+                    addAction("PLAY")
+                    addAction("PAUSE")
+                }
+
+                registerReceiver(
+                    this,
+                    playPauseReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                )
+
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MusicPlayerScaffold(
                         context = this,
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier.padding(innerPadding),
+                        songs = songs,
+                        mediaPlayer = mediaPlayer,
+                        playingSong = playingSong,
+                        onMediaPlayerChange = {
+                            mediaPlayer = null
+                            mediaPlayer = it
+                        },
+                        onSongChange = {
+                            mediaPlayer = null
+                            playingSong = it
+                        }
                     )
                 }
             }
         }
+        createNotificationChannel(context = this)
+    }
+
+
+    val playPauseReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent?) {
+            when (intent?.action) {
+                "PLAY" -> {
+                    mediaPlayer?.start()
+                    showMusicNotification(context, playingSong!!, mediaPlayer?.isPlaying == true)
+                }
+
+                "PAUSE" -> {
+                    mediaPlayer?.pause()
+                    showMusicNotification(context, playingSong!!, mediaPlayer?.isPlaying == true)
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        unregisterReceiver(playPauseReceiver)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
-    val songs = getMusicFiles(context = context)
+fun MusicPlayerScaffold(
+    context: Context,
+    modifier: Modifier = Modifier,
+    mediaPlayer: MediaPlayer?,
+    playingSong: Song?,
+    onMediaPlayerChange: (MediaPlayer) -> Unit,
+    onSongChange: (Song) -> Unit,
+    songs: List<Song>
+) {
     val coroutineScope = rememberCoroutineScope()
     val bottomSheetScaffoldState = rememberBottomSheetScaffoldState(
         bottomSheetState = SheetState(
@@ -101,9 +169,6 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
     val screenWidth = configuration.screenWidthDp.dp
     val sheetPeekHeight = screenHeight * 0.15f // 15% of the screen height
     val imageButtonWidth = screenWidth * 0.10f // 10% of the screen width
-
-    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
-    var playingSong by remember { mutableStateOf<Song?>(null) }
 
     BottomSheetScaffold(
         modifier = modifier,
@@ -124,26 +189,29 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                     MusicPlayerScreen(
                         modifier = myModifier,
                         context = context,
-                        song = playingSong!!,
+                        song = playingSong,
                         mediaPlayer = mediaPlayer,
                         onMediaPlayerChange = {
-                            mediaPlayer = null
-                            mediaPlayer = it
+                            onMediaPlayerChange(
+                                it
+                            )
                         },
                         onNext = {
                             mediaPlayer?.stop()
                             mediaPlayer?.release()
 //                                mediaPlayer?.reset()
-                            mediaPlayer = null
-                            playingSong = songs[(songs.indexOf(playingSong) + 1) % songs.size]
+//                            onMediaPlayerChange(null)
+//                            mediaPlayer = null
+//                            playingSong = songs[(songs.indexOf(playingSong) + 1) % songs.size]
+                            onSongChange(songs[(songs.indexOf(playingSong) + 1) % songs.size])
                         },
                         onPrevious = {
                             mediaPlayer?.stop()
                             mediaPlayer?.release()
 //                                mediaPlayer?.reset()
-                            mediaPlayer = null
-                            playingSong =
-                                songs[(songs.indexOf(playingSong) - 1 + songs.size) % songs.size]
+//                            mediaPlayer = null
+//                            playingSong = songs[(songs.indexOf(playingSong) - 1 + songs.size) % songs.size]
+                            onSongChange(songs[(songs.indexOf(playingSong) - 1 + songs.size) % songs.size])
                         },
                         width = imageButtonWidth,
                         state = bottomSheetScaffoldState.bottomSheetState.currentValue
@@ -188,7 +256,8 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                                 text = "Play/Pause"
                             ) {
                                 // Play/Pause logic
-                                playingSong = songs[0]
+//                                playingSong = songs[0]
+                                onSongChange(songs[0])
                             }
                             CustomClickableImage(
                                 modifier = Modifier.size(imageButtonWidth),
@@ -232,8 +301,9 @@ fun MusicPlayerScaffold(context: Context, modifier: Modifier = Modifier) {
                                 mediaPlayer?.stop()
                                 mediaPlayer?.release()
 //                                mediaPlayer?.reset()
-                                mediaPlayer = null
-                                playingSong = song
+//                                mediaPlayer = null
+//                                playingSong = song
+                                onSongChange(song)
                                 // Expand the bottom sheet when a song is clicked
                                 coroutineScope.launch {
                                     bottomSheetScaffoldState.bottomSheetState.expand()
@@ -279,6 +349,37 @@ fun MusicPlayerScreen(
 ) {
     var progress by remember { mutableStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
+    // Register the receiver
+    DisposableEffect(Unit) {
+        val filter = IntentFilter().apply {
+            addAction("PLAY")
+            addAction("PAUSE")
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent?) {
+                when (intent?.action) {
+                    "PLAY" -> {
+                        mediaPlayer?.start()
+                        showMusicNotification(context, song, true)
+                    }
+
+                    "PAUSE" -> {
+                        mediaPlayer?.pause()
+                        showMusicNotification(context, song, false)
+                    }
+                }
+            }
+        }
+        context.registerReceiver(
+            receiver, filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+        onDispose {
+            context.unregisterReceiver(
+                receiver
+            )
+        }
+    }
 
     LaunchedEffect(song.uri) {
         mediaPlayer?.release()
@@ -446,10 +547,61 @@ fun showMusicNotification(context: Context, song: Song, isPlaying: Boolean) {
         if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
     val playPauseAction = if (isPlaying) "ACTION_PAUSE" else "ACTION_PLAY"
 
+    val playPauseIntent = Intent(context, MusicNotificationReceiver::class.java).apply {
+        action = playPauseAction
+    }
+    val playPausePendingIntent: PendingIntent = PendingIntent.getBroadcast(
+        context,
+        0,
+        playPauseIntent,
+        PendingIntent.FLAG_IMMUTABLE
+    )
+
     val intent = Intent(context, MusicActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
     }
-    val pendingIntent: PendingIntent = PendingIntent.getActivity(context, 0, intent, 0)
+    val pendingIntent: PendingIntent = PendingIntent.getActivity(
+        context,
+        0,
+        intent,
+        PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val notification = NotificationCompat.Builder(context, "music_player_channel")
+        .setSmallIcon(R.drawable.baseline_music_note_24)
+        .setContentTitle("Now Playing")
+        .setContentText(song.title)
+        .setContentIntent(pendingIntent)
+        .setPriority(NotificationCompat.PRIORITY_LOW)
+        .setOnlyAlertOnce(true)
+        .addAction(playPauseIcon, if (isPlaying) "Pause" else "Play", playPausePendingIntent)
+        .setStyle(androidx.media.app.NotificationCompat.MediaStyle())
+        .build()
+
+    NotificationManagerCompat.from(context).notify(1, notification)
+}
+
+
+fun showMusicNotification1(context: Context, song: Song, isPlaying: Boolean) {
+    val playPauseIcon =
+        if (isPlaying) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24
+    val playPauseAction = if (isPlaying) "ACTION_PAUSE" else "ACTION_PLAY"
+
+    val playPauseIntent = Intent(context, MusicNotificationReceiver::class.java).apply {
+        action = playPauseAction
+    }
+    val playPausePendingIntent: PendingIntent = PendingIntent.getBroadcast(
+        context,
+        0,
+        playPauseIntent,
+        PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val intent = Intent(context, MusicActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+    }
+    val pendingIntent: PendingIntent =
+        PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
     val notification = NotificationCompat.Builder(context, "music_player_channel")
         .setSmallIcon(R.drawable.baseline_music_note_24)
@@ -523,6 +675,17 @@ fun getLength(duration: Long): String {
 @Composable
 fun GreetingPreview2() {
     MyNotesTheme {
-        MusicPlayerScaffold(context = MusicActivity())
+//        MusicPlayerScaffold(
+//            context = MusicActivity(),
+//            mediaPlayer = mediaPlayer,
+//            playingSong = playingSong,
+//            onMediaPlayerChange = {
+//                mediaPlayer = it
+//            },
+//            onSongChange = {
+//                playingSong = it
+//            },
+//            songs = songs
+//        )
     }
 }

@@ -3,6 +3,7 @@ package com.bethwelamkenya.mynotes
 import android.content.Context
 import android.content.Intent
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import com.bethwelamkenya.mynotes.music.MusicActivity
 import com.bethwelamkenya.mynotes.notes.NotesActivity
 import com.bethwelamkenya.mynotes.ui.components.CustomButton
@@ -42,6 +44,16 @@ class MainActivity : ComponentActivity() {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Greeting(this, modifier = Modifier.padding(innerPadding))
                 }
+            }
+        }
+        // Check and request notification permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
             }
         }
     }

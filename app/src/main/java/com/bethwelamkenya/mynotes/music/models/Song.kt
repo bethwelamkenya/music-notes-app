@@ -9,7 +9,8 @@ data class Song(
     val title: String,
     val duration: Long,
     val date: Date,
-    val uri: String = ""
+    val uri: String = "",
+    val artist: String = ""
 ) {
     constructor(title: String, duration: Long, uri: String) : this(id = 0, title, duration, date = Date(), uri = uri)
 

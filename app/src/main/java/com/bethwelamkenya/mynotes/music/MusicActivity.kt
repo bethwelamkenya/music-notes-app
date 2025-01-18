@@ -122,7 +122,7 @@ class MusicActivity : ComponentActivity() {
     }
 
 
-    val playPauseReceiver = object : BroadcastReceiver() {
+    private val playPauseReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent?) {
             when (intent?.action) {
                 "PLAY" -> {
@@ -167,8 +167,8 @@ fun MusicPlayerScaffold(
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val screenWidth = configuration.screenWidthDp.dp
-    val sheetPeekHeight = screenHeight * 0.15f // 15% of the screen height
-    val imageButtonWidth = screenWidth * 0.10f // 10% of the screen width
+    val sheetPeekHeight = screenHeight * 0.17f // 15% of the screen height
+    val imageButtonWidth = screenWidth * 0.12f // 10% of the screen width
 
     BottomSheetScaffold(
         modifier = modifier,
@@ -238,21 +238,21 @@ fun MusicPlayerScaffold(
                         ) {
                             CustomClickableImage(
                                 modifier = Modifier.size(imageButtonWidth),
-                                image = R.drawable.baseline_skip_previous_24,
+                                image = R.drawable.double_left,
                                 text = "Previous Song"
                             ) {
                                 // Previous song logic
                             }
                             CustomClickableImage(
                                 modifier = Modifier.size(imageButtonWidth),
-                                image = R.drawable.baseline_replay_10_24,
+                                image = R.drawable.rewind,
                                 text = "Rewind"
                             ) {
                                 // Rewind logic
                             }
                             CustomClickableImage(
                                 modifier = Modifier.size(imageButtonWidth),
-                                image = R.drawable.baseline_play_arrow_24,
+                                image = R.drawable.play,
                                 text = "Play/Pause"
                             ) {
                                 // Play/Pause logic
@@ -261,14 +261,14 @@ fun MusicPlayerScaffold(
                             }
                             CustomClickableImage(
                                 modifier = Modifier.size(imageButtonWidth),
-                                image = R.drawable.baseline_forward_10_24,
+                                image = R.drawable.fast_forward,
                                 text = "Forward"
                             ) {
                                 // Forward logic
                             }
                             CustomClickableImage(
                                 modifier = Modifier.size(imageButtonWidth),
-                                image = R.drawable.baseline_skip_next_24,
+                                image = R.drawable.double_right,
                                 text = "Next"
                             ) {
                                 // Next song logic
@@ -324,6 +324,7 @@ fun MusicPlayerScaffold(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            Text(text = if (song.artist == "<unknown>" || song.artist.isEmpty()) "Unknown" else song.artist)
                             Text(text = getLength(song.duration), fontWeight = FontWeight.Bold)
                             Text(text = song.getFormattedDate())
                         }
@@ -480,7 +481,7 @@ fun MusicPlayerScreen(
         ) {
             CustomClickableImage(
                 modifier = Modifier.size(width),
-                image = R.drawable.baseline_skip_previous_24,
+                image = R.drawable.double_left,
                 text = "Previous Song"
             ) {
                 // Previous song logic
@@ -489,7 +490,7 @@ fun MusicPlayerScreen(
             }
             CustomClickableImage(
                 modifier = Modifier.size(width),
-                image = R.drawable.baseline_replay_10_24,
+                image = R.drawable.rewind,
                 text = "Rewind"
             ) {
                 // Rewind logic
@@ -497,7 +498,7 @@ fun MusicPlayerScreen(
             }
             CustomClickableImage(
                 modifier = Modifier.size(width),
-                image = if (mediaPlayer?.isPlaying == true) R.drawable.baseline_pause_24 else R.drawable.baseline_play_arrow_24,
+                image = if (mediaPlayer?.isPlaying == true) R.drawable.pause else R.drawable.play,
                 text = "Play/Pause"
             ) {
                 // Play/Pause logic
@@ -509,7 +510,7 @@ fun MusicPlayerScreen(
             }
             CustomClickableImage(
                 modifier = Modifier.size(width),
-                image = R.drawable.baseline_forward_10_24,
+                image = R.drawable.fast_forward,
                 text = "Forward"
             ) {
                 // Forward logic
@@ -517,7 +518,7 @@ fun MusicPlayerScreen(
             }
             CustomClickableImage(
                 modifier = Modifier.size(width),
-                image = R.drawable.baseline_skip_next_24,
+                image = R.drawable.double_right,
                 text = "Next"
             ) {
                 // Next song logic
@@ -627,6 +628,7 @@ fun getMusicFiles(context: Context): List<Song> {
         MediaStore.Audio.Media.DURATION,
         MediaStore.Audio.Media.DATE_ADDED,
         MediaStore.Audio.Media.DATA,
+        MediaStore.Audio.Media.ARTIST
     )
     val cursor = contentResolver.query(uri, projection, null, null, null)
 
@@ -636,6 +638,7 @@ fun getMusicFiles(context: Context): List<Song> {
         val durationColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
         val dateColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
         val uriColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+        val artistColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
 
         while (it.moveToNext()) {
             val id = it.getInt(idColumn)
@@ -643,13 +646,15 @@ fun getMusicFiles(context: Context): List<Song> {
             val duration = it.getLong(durationColumn)
             val dateAdded = it.getLong(dateColumn) * 1000L // Convert to milliseconds
             val songUri = it.getString(uriColumn)
+            val artist = it.getString(artistColumn)
 
             val song = Song(
                 id = id,
                 title = title,
                 duration = duration,
                 date = Date(dateAdded),
-                uri = songUri
+                uri = songUri,
+                artist = artist
             )
             musicFiles.add(song)
         }
